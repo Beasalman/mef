@@ -1,0 +1,33 @@
+# Tipo de malla:
+#   [0] Lectura desde archivo
+#   [1] Q2T
+#   [2] Q4T
+#   [3] Refinamientos sucesivos de una malla grosera
+3
+# Nombre del archivo que contiene la malla a leer (solo si tipo = 0)
+dmalla00.dat
+# Número de refinamientos (solo tiene efecto si tipo = 3):
+3
+# Criterios de refinamiento
+#   [0] Uniforme
+#   [1] Criterio inicial, se hereda en las sucesivas mallas
+#   [2] Estimador
+#   [3] Circunferencia centrada
+#   [4] Contacto con la frontera libre
+# Criterio de refinamiento 0
+0
+# Criterio de refinamiento 1
+4
+# Parámetro
+0.30
+# Número de nodos en abscisas y en ordenadas (solo tiene efecto si tipo < 3):
+15
+15
+# Coordenadas del vértice inferior izquierdo:
+0.0
+0.0
+# Coordenadas del vértice superior derecho:
+1.0
+1.0
+# 
+# -----------------------------------------------------------------------------------

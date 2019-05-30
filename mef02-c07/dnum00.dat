@@ -1,0 +1,47 @@
+# Método de elementos finitos:
+#   [1] P1-Lagrange
+#   [2] P2-Lagrange
+#   [3] Q1-Lagrange
+1
+# Método de características: número máximo de iteraciones
+#     Número máximo de iteraciones
+10
+#     Intervalo de iteraciones para salvaguarda de resultados
+15
+# 
+# Intervalo de iteraciones para refinamiento de mallado
+30
+# 
+# Método de punto fijo
+#     Número máximo de iteraciones
+50
+#     Error relativo máximo
+0.0001
+# 
+# Método de resolución del sistema de ecuaciones lineales
+#   [1] LU
+#   [2] Gauss-Seidel
+#   [3] Relajación
+#   [4] Gradiente conjugado
+#   [5] Doble gradiente conjugado
+#   [6] Doble gradiente conjugado estabilizado
+# 
+#  [11] Relajación con proyección
+#  [12] ALAS
+0
+#      Número máximo de iteraciones en el método de resolución del SEL
+2000
+#      Error relativo máximo en el método de resolución del SEL
+0.00001
+#      Parámetro de relajación
+1.8
+# Fórmula de integración numérica:
+#   [1] Vértices del triángulo
+#   [2] Puntos medios de los lados del triángulo
+#   [3] Gauss, 3 nodos interiores en el triángulo
+#   [4] Gauss, vértices del cuadrado
+#   [5] Gauss, 9 nodos interiores en el cuadrado
+2
+# Parámetro Theta
+0.50
+# -----------------------------------------------------------------------------
