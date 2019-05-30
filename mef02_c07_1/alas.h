@@ -2,8 +2,6 @@
 using std::cout;
 using std::endl;
 
-// que guapo es luis
-
 #include <vector>
 using std::vector;
 
