@@ -1,0 +1,26 @@
+#include "cconv01.h"
+
+/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+
+cconv01::cconv01 (double sigma, double rho, double rr, double theta, double kappa, double nuinf) {
+
+    this->a01 = 0;
+    this->a02 = 0.5 * rho * sigma  - rr;
+    this->a20 = 0.5 * sigma * sigma  / hinf - kappa * theta / nuinf;
+    this->a21 = 0.5 * rho * sigma - kappa;
+}
+
+/* ----------------------------------------------------------- */
+
+Vector2d cconv01::operator () (double x, double y) {
+
+    Vector2d z;
+
+    z (0) = this->a02 *x ;
+    z (1) = this->a20 + this->a21 * y;
+
+    return z;
+}
+
+/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+

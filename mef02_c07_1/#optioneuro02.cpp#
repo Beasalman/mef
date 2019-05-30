@@ -1,0 +1,348 @@
+#include "optioneuro02.h"
+
+/* -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*- */
+
+void optioneuro02 (vector <cmalla2d01 *> mallas, int level, cmalla2d01 *m, cgauss02 *g, cgauss1d *g1, cdataprob dprob, cdatamesh dmesh, cdatanum dnum,
+                   map <int, celem2d *> geltos, map <int, cnodo2d *> gnodos, map <int, carista *> garistas, cbs *bs, cmark *fmark,
+                   VectorXd &vold, VectorXd &uold, VectorXd &uold1d, cdiffusion2d *diff, cconvection2d *velocity01, cconvection2d *velocity02) {
+
+    /* OPTIONEURO02: OpciÃ³n europea 2D.
+                     Refinamiento de mallado a lo largo del tiempo.
+ 
+    Entradas:
+    - m: (puntero a) malla actual.
+    - g: 
+    - dmesh: 
+    */
+
+    int j, iter, conv;
+    double errj;
+    cnodo2d *nod, *nodb, *nodc;
+    celem2d *ef, *efc;
+    cfrontera2d *fr;
+    map <int, celem2d*> :: iterator ielt;
+    Vector2d y, z;
+
+    // ----------------------------------------------------------------------------
+    // CÃ¡lculo de los puntos desplazados sobre la malla 2D. Almacenamos sus coordenadas baricÃ©ntricas.
+
+    for (ielt=m->eltos.begin(); ielt!=m->eltos.end(); ielt++) {
+        ef = ielt->second;
+        for (int i=0; i<g->n; i++) {
+            y (0) = g->x [i];
+            y (1) = g->y [i];
+            z = ef->ck * y + ef->dk;
+            nodc = new cnodo2d (-1, 0., 0.);
+            nodc = carac02 (z, dnum.caracdeltat, 10, velocity01, m);
+
+            efc = localiza01 (mallas, level, nodc);
+            ef->eltosdesplazados.push_back (efc);
+
+            nodb = new cnodo2d (-1, 0., 0.);
+            baric01 (efc, nodc, nodb);
+            ef->nodosdesplazados.push_back (nodb);
+        }
+    }
+
+    // ----------------------------------------------------------------------------
+    // CÃ¡lculo de los puntos desplazados de la frontera 1. Almacenamos sus coordenadas baricÃ©ntricas.
+
+    fr = m->fronteras [1];
+    for (int i=0; i<fr->nodos.size(); i++) {
+        nod = fr->nodos [i];
+        z (0) = nod->x;
+        z (1) = nod->y;
+        nodc = new cnodo2d (-1, 0., 0.);
+        nodc = carac02 (z, dnum.caracdeltat, 10, velocity02, m);
+
+        efc = localiza01 (mallas, level, nodc);
+        nod->eltodesplazado = efc;
+
+        nodb = new cnodo2d (-1, 0., 0.);
+        baric01 (efc, nodc, nodb);
+        nod->nododesplazado = nodb;
+    }
+
+
+//-----------------------------------------------------------------------------------------------
+	
+	//Cálculo de la malla 1d para el calculo de la solucion de BS con riesgo de contrapartida
+
+	map <int, cnodo1d *> gnodos1d;
+	map <int, celem1d *> geltos1d;
+	
+
+   
+	//int numnod1d = m->fronteras[0]->nodos.size();
+	//int nelt1d = numnod1d - 1;
+	//cmalla1d *meshBS = new cmalla1d(1, numnod1d, nelt1d, m->fronteras[0]->nodos);
+	cmalla1d *meshBS =	meshgen2d1d(m);
+
+	int numnod1d = meshBS->nsom;
+	SparseMatrix <double, ColMajor> a1d (numnod1d,numnod1d);
+	
+	//frnu = m->fronteras [1];
+	double nu;
+	VectorXd bc1d (meshBS->nsom);
+	VectorXd b1d (meshBS->nsom);
+	VectorXd bu1d (meshBS->nsom);
+	VectorXd uant1d = VectorXd::Zero (meshBS->nsom);
+	VectorXd u1d (meshBS->nsom);
+	//MatrixXd solu1d_domain (fr->nodos.size(),m->nsom,dnum.caracniter);
+	float solu1d_domain[fr->nodos.size()][meshBS->nsom][dnum.caracniter];
+	for (int i=0; i<fr->nodos.size(); i++) {
+	//matriz para la frontera 2 nu = nuinf
+		nu = fr->nodos [i]->y;
+		globalmat02 (meshBS, g1, dprob, dnum, nu, a1d);   
+		dirichlet00(meshBS,a1d);
+		a1d.makeCompressed ();
+		SparseLU <SparseMatrix <double> > solver;
+		solver.compute (a1d);
+		 VectorXd v1d1 = VectorXd::Zero (meshBS->nsom);
+		 VectorXd ur1d = VectorXd::Zero (meshBS->nsom);
+		 double tau = dprob.tini;
+		// ----------------------------------------------------------------------------
+		for (int n=0; n<dnum.caracniter; n++) {
+		    tau += dnum.caracdeltat;
+		    // CÃ¡lculo de los puntos desplazados de la malla 1d. Se guardan en caracpoint y caracelt
+		     cvelocity1d *velocity03 = new cvelocity1d(nu, dprob.rr);
+		    cvelocity1d *velocity04 = new cvelocity1d0(dprob.rr); //velocity on the boundary s_inf
+		  
+		    /* VectorXd caracpoint (meshBS->nsom);
+		    VectorXd caracpointfr (meshBS->nsom);
+		    caracpoint = VectorXd::Zero (meshBS->nsom);
+		    caracpointfr = VectorXd::Zero (meshBS->nsom);*/
+		    vector <double> caracpoint;
+		    vector<double> caracpointfr;
+		    vector <celem1d *> caracelt;
+		    vector <celem1d *> caraceltfr;
+		   
+		    ccurve *cc = NULL;
+		    ccurve *ccfr = NULL;
+		    // cc = new ccurve01(velocity03, dnum.caracdeltatm, meshBS->nodos.begin(), meshBS->nodos.end());
+		    //ccfr = new ccurve01(velocity04, dnum.caracdeltatm, meshBS->nodos.begin(), meshBS->nodos.end());
+		    cc = new ccurve01(velocity03, dnum.caracdeltat, meshBS->nodos[0]->s, meshBS->nodos[numnod1d-1]->s);
+		    ccfr = new ccurve01(velocity04, dnum.caracdeltat, meshBS->nodos[0]->s, meshBS->nodos[numnod1d-1]->s);
+		    carac1d (meshBS, g1, velocity03, cc, caracpoint, caracelt); //Obtencion del elemento y nodo desplazado de la malla 1d
+		       
+		//-----------------------------------------------------------------------------------------------
+			
+		    
+			globalvec02 (meshBS, g1, caracpoint, caracelt, uold1d, bc1d);
+		
+			for (int k=0; k<meshBS->nsom; k++) {
+				v1d1 (k) = (*bs) (m->nodos[k]->x, nu, tau);
+	        }
+	        j = 0;
+        	util02 (uold1d, uant1d);
+	        errj = 1.0 + dnum.pfemax;
+	        
+	        while ((j < dnum.pfniter) && (errj > dnum.pfemax)) {
+            	j += 1;
+		    for (int k=0; k<meshBS->nsom; k++) {
+	        	ur1d[k] = -(dprob.sF + dprob.lambdaC * (1-dprob.RC)) * positive (v1d1(k)+uant1d(k)) - dprob.lambdaC * (1-dprob.RC) * negative(v1d1(k)+uant1d(k));
+		     }
+		        globalvec03 (meshBS, g1, ur1d, bu1d);
+		        b1d = dnum.caracdeltat * bu1d + bc1d;
+	        
+		        //Curva con la caracteristica que afecta solo a la frontera
+		        carac1d (meshBS, g1, velocity04, ccfr, caracpointfr, caraceltfr);
+		        celem1d *effr = caraceltfr.back();//Elemento donde cae S_inf con la curva caracteritica
+		        double xiSinf = caracpointfr.back();
+		        VectorXd Ufr(meshBS->nfr);	        
+			double Uoldfr = ((xiSinf-effr->nodos[0]->x)*uold1d(effr->nodos[1]->x) + (effr->nodos[1]->x-xiSinf)*uold1d(effr->nodos[0]->x))/(effr->nodos[1]->x-effr->nodos[0]->x);
+
+			Ufr[0] = (uold1d(0) + dnum.caracdeltat*ur1d(0))/(1 + (dprob.r)*dnum.caracdeltat);
+				  Ufr[1] = (Uoldfr - ur1d(numnod1d-1))/(1 + (dprob.r)*dnum.caracdeltat);
+			dirichlet00(meshBS, b1d, Ufr);
+	        	u1d = solver.solve (b1d);
+	        	errj = error02 (u1d, uant1d);
+            	util02 (u1d, uant1d);
+            }
+				
+		 for (int k=0; k<meshBS->nsom;k++)
+		  //solu1d_domain(i,k,n) = u1d(k);
+		  solu1d_domain[i][k][n] = u1d(k);
+	        util02 (u1d, uold1d);
+	}
+	}
+	
+    // ----------------------------------------------------------------------------
+
+
+    // ----------------------------------------------------------------------------
+    // Matriz (hueca) y resolvedor del sistema de ecuaciones.
+
+    SparseMatrix <double, ColMajor> a (m->nsom,m->nsom);
+    SparseMatrix <double, ColMajor> au (m->nsom,m->nsom);
+    globalmat13 (m, g, dnum.caracdeltat, dprob.r, diff, a);
+    globalmat13 (m, g, dnum.caracdeltat, dprob.r, diff, au);
+    dirichlet22 (m, a);
+    a.makeCompressed ();
+    dirichlet22 (m, au);
+    au.makeCompressed ();
+
+    //ConjugateGradient <SparseMatrix <double, ColMajor> > solver;
+    //solver.setMaxIterations (2 * m->nsom);
+    //solver.setTolerance (1.e-20);
+
+	SparseLU <SparseMatrix <double> > solver;
+    solver.compute (a);
+    solver.compute (au);
+    // LU (1).
+    //SparseLU <SparseMatrix <double>, COLAMDOrdering <int> > solver;
+    // LU (2).
+    //SparseLU <SparseMatrix <double, ColMajor>, COLAMDOrdering <int> > solver;
+    //solver.analyzePattern (a);
+    //solver.factorize (a);
+    // BiCGStab.
+    //BiCGSTAB <SparseMatrix <double> > solver;
+
+    //solver.compute (a);
+
+    // ----------------------------------------------------------------------------
+    // Vectores: tÃ©rmino fuente, caracterÃ­sticas y vector global.
+
+    VectorXd bc (m->nsom);
+    VectorXd bcu (m->nsom);
+    VectorXd bk (m->nsom);
+    VectorXd b (m->nsom);
+    VectorXd bu (m->nsom);
+
+    // Vectores: soluciones numÃ©rica y analÃ­tica.
+
+    VectorXd v = VectorXd::Zero (m->nsom);
+    VectorXd u = VectorXd::Zero (m->nsom);
+    VectorXd vrisk (m->nsom);
+    VectorXd ua = VectorXd::Zero (m->nsom);
+    VectorXd uk = VectorXd::Zero (m->nsom);
+    VectorXd uant = VectorXd::Zero (m->nsom);
+    VectorXd v1d = VectorXd::Zero (m->nsom);
+    // VectorXd u1d = VectorXd::Zero (m->nsom);
+
+    // ----------------------------------------------------------------------------
+    // Bucle temporal.
+
+    cout << endl;
+    printf ("    Time       Real       Mesh        Solver           Solver     \n");
+    printf ("    Step       Time      Nodes         Error          Iter. Nr. \n\n");
+
+    int n = 0;
+    double t = dprob.tfin;
+    double tau = dprob.tini;
+
+    printf ("   %5d", n);
+    printf ("   %8.3f", t);
+    printf ("      %5d", m->nsom);
+    printf ("      %12s", "");
+    printf ("       %5s", "");
+    printf ("\n");
+
+    int itp = 0;
+    for (int n=0; n<dnum.caracniter; n++) {
+        t -= dnum.caracdeltat;
+        tau += dnum.caracdeltat;
+        printf ("   %5d", n+1);
+        printf ("   %8.3f", t);
+        printf ("      %5d", m->nsom);
+
+        // Valor de la opciÃ³n.
+
+        for (int i=0; i<m->nsom; i++) {
+	    v1d (i) = (*bs) (m->nodos[i]->x, m->nodos[i]->y, tau);
+        }
+
+        // Vector del tÃ©rmino de caracterÃ­sticas.
+
+        bc = VectorXd::Zero (m->nsom);
+        globalvec12 (m, g, vold, bc);
+        bcu = VectorXd::Zero (m->nsom);
+        globalvec12 (m, g, uold, bcu);
+
+        // Bucle de punto fijo.
+
+        j = 0;
+        util02 (uold, uant);
+	//  util02 (vold, vant);
+        errj = 1.0 + dnum.pfemax;
+
+
+
+		b = bc;
+		dirichlet22 (m, v1d, b);
+		v = solver.solve (b);
+        while ((j < dnum.pfniter) && (errj > dnum.pfemax)) {
+            j += 1;
+
+            // Vector segundo miembro.
+
+            bk = VectorXd::Zero (m->nsom);
+            uk = VectorXd::Zero (m->nsom);
+            for (int i=0; i<m->nsom; i++) {
+                uk[i] = -(dprob.sF + dprob.lambdaC * (1-dprob.RC)) * positive (uant(i) + v(i)) - dprob.lambdaC * (1-dprob.RC) * negative(uant(i) + v(i));
+            }
+            globalvec13 (m, g, uk, bk);
+
+            // ResoluciÃ³n del sistema lineal.
+
+            bu = dnum.caracdeltat * bk + bcu;
+
+	   VectorXd u1d_nu = VectorXd::Zero (fr->nodos.size());
+	   for  (int i=0; i<fr->nodos.size(); i++) {
+	      u1d_nu(i) =  solu1d_domain[i][meshBS->nsom][n];	  
+           }
+           VectorXd u1d_S = VectorXd::Zero (meshBS->nsom);
+	   for (int k=0; k<meshBS->nsom; k++) {
+	      u1d_S(k) =  solu1d_domain[0][k][n];
+            }
+	   	dirichlet22 (m, u1d_nu, u1d_S, bu);
+	   //dirichlet22 (m, solu1d_domain[][][n], bu);
+           
+           // dirichlet22 (m, uk, uold, dnum.caracdeltat, dprob.f, b);
+            
+            u = solver.solve (bu);
+
+            errj = error02 (u, uant);
+            util02 (u, uant);
+        }
+		vrisk = v + u;
+		//  printf ("     %12.8e", solver.error());
+		//   printf ("      %5ld", solver.iterations());
+//        printf ("     %12.8e", 0.0);
+//        printf ("      %5ld", 0L);
+
+        // ReactualizaciÃ³n y salvaguarda de resultados.
+
+        util02 (u, uold);
+        if (n % dnum.nitp == 0) {
+            itp += 1;
+            fprint11 (level, itp, u);                    // AproximaciÃ³n numÃ©rica.
+            fprint19 (level, itp, v);                      // SoluciÃ³n de BS.
+        }
+        cout << endl;
+
+        // ----------------------------------------------------------------------------
+        // Refinamiento de la malla y prolongaciÃ³n de magnitudes a lo largo del tiempo
+/*
+        if ((n+1) % dnum.nitref == 0) {
+            meshref02 (mallas, level, g, dprob, dmesh, dnum, geltos, gnodos, garistas, fmark, uold, u,
+                       a, velocity01, velocity02, diff);
+
+            m = mallas.back ();
+            bc.resize (m->nsom);
+            bk.resize (m->nsom);
+            b.resize (m->nsom);
+            ua.resize (m->nsom);
+            uant.resize (m->nsom);
+            v.resize (m->nsom);
+
+//            solver.analyzePattern (a);
+//            solver.factorize (a);
+            solver.compute (a);
+        }
+        */
+    }
+}
+
+/* -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*- */
+
