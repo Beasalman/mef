@@ -6,7 +6,8 @@ CC = g++
 
 #-- CFLAG1 = -O0 -c -g -I /usr/include/eigen3/         # Portátil
 #CFLAG1 = -O0 -c -g -I /opt/eigen-3.2.2/            # Despacho
-CFLAG1 = -O0 -c -g -I. -I/ufs/bsm/Documents/Eigen/            # Despacho
+#CFLAG1 = -O0 -c -g -I. -I/ufs/bsm/Documents/Eigen/            # Despacho
+CFLAG1 = -O0 -c -g -I. -I../Eigen/            # Despacho
 CFLAG2 = -O0
 
 

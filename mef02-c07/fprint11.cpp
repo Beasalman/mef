@@ -11,7 +11,7 @@ void fprint11 (int level, VectorXd u) {
     - u:     vector.
     */
 
-    char nomfic[12];
+    char nomfic[20];
     int long1 = sprintf (nomfic, "sXVAnumap%02d.dat", level);
 
     // Apertura del archivo.
@@ -43,7 +43,7 @@ void fprint11 (int level, int itp, VectorXd u) {
     - u:     vector.
     */
 
-    char nomfic[12];
+    char nomfic[20];
     int long1 = sprintf (nomfic, "sXVAnumap%02dt%03d.dat", level, itp);
 
     // Apertura del archivo.
